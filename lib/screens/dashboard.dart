@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/maintenance_provider.dart';
+import 'sign_in.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -78,17 +79,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return SafeArea(
       child: Scaffold(
         backgroundColor: Color(0xFF091017),
+        appBar: AppBar(
+          backgroundColor: Color(0xFF07121A),
+          elevation: 0,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Dashboard", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              if (prov.currentUserName != null)
+                Text("${prov.currentUserName}", style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+          actions: [
+            PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'signout') {
+                  // Save and clear auth state, then navigate to SignInScreen and remove history
+                  await prov.signOut();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const SignInScreen()),
+                    (route) => false,
+                  );
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                PopupMenuItem(
+                  value: 'signout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, color: Colors.redAccent),
+                      SizedBox(width: 8),
+                      Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
+                    ],
+                  ),
+                ),
+              ],
+              icon: Icon(Icons.more_vert, color: Colors.white),
+            ),
+          ],
+        ),
         body: Padding(
           padding: const EdgeInsets.all(14.0),
           child: ListView(
             children: [
               SizedBox(height: 10),
-              Text("Dashboard",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold)),
-              SizedBox(height: 20),
 
               // Dashboard stat cards styled like screenshot
               Row(

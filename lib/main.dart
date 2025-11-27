@@ -4,10 +4,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'models/maintenance_item.dart';
 import 'providers/maintenance_provider.dart';
-import 'screens/dashboard.dart';
-import 'screens/trips.dart';
-import 'screens/maintenance.dart';
-import 'screens/vehicles.dart';
+import 'screens/home_shell.dart';
+import 'screens/sign_in.dart';
 // The generated adapter is included via the `part` directive in the model file.
 // Do not import `maintenance_item.g.dart` directly.
 
@@ -17,6 +15,8 @@ void main() async {
 
   Hive.registerAdapter(MaintenanceItemAdapter());
   await Hive.openBox<MaintenanceItem>(MaintenanceProvider.boxName);
+
+  await Hive.openBox<Map>(MaintenanceProvider.usersBoxName);
 
   final maintenanceProvider = MaintenanceProvider();
   await maintenanceProvider.init();
@@ -44,35 +44,14 @@ class MyApp extends StatelessWidget {
             unselectedItemColor: Colors.white60,
           ),
         ),
-        home: HomeShell(),
+        home: Consumer<MaintenanceProvider>(
+          builder: (context, prov, _) {
+            return prov.isAuthenticated ? HomeShell() : SignInScreen();
+          },
+        ),
       ),
     );
   }
 }
 
-class HomeShell extends StatefulWidget {
-  @override
-  _HomeShellState createState() => _HomeShellState();
-}
-
-class _HomeShellState extends State<HomeShell> {
-  int _selected = 0;
-  final List<Widget> _screens = [DashboardScreen(), TripsScreen(), MaintenanceScreen(), VehiclesScreen()];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: _screens[_selected],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selected,
-        onTap: (i) => setState(() => _selected = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.alt_route), label: 'Trips'),
-          BottomNavigationBarItem(icon: Icon(Icons.build), label: 'Maintenance'),
-          BottomNavigationBarItem(icon: Icon(Icons.directions_car_filled), label: 'Vehicles'),
-        ],
-      ),
-    );
-  }
-}
+// `HomeShell` is defined in `lib/screens/home_shell.dart` to avoid circular imports
