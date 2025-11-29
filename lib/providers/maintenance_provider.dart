@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/maintenance_item.dart';
 import '../models/device.dart';
 import '../models/vehicle.dart';
@@ -206,55 +207,65 @@ class MaintenanceProvider with ChangeNotifier {
 
   // AUTHENTICATION METHODS
   Future<void> signUp(String name, String email, String password) async {
-    // Store user credentials in registered users box (no device attached at signup)
-    usersBox.put(email, {
-      'name': name,
-      'email': email,
-      'password': password,
-    });
-
-    // Automatically sign in after signing up
-    currentUserName = name;
-    currentUserEmail = email;
-    this.deviceId = null;
-    isAuthenticated = true;
-    isFirstTimeSignUp = true; // Flag for first-time signup
-    
-    // Load user-specific data (should be empty for new user)
-    await _loadUserData();
-    await loadUserDevices();
-    await loadUserVehicles();
-    // Load maintenance items for selected vehicle (if any)
-    await loadItemsForSelectedVehicle();
-    notifyListeners();
+    try {
+      // Create user with Firebase Auth
+      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      // Update user profile with name
+      await userCredential.user?.updateDisplayName(name);
+      
+      // Set local auth state
+      currentUserName = name;
+      currentUserEmail = email;
+      this.deviceId = null;
+      isAuthenticated = true;
+      isFirstTimeSignUp = true;
+      
+      // Load user-specific data (should be empty for new user)
+      await _loadUserData();
+      await loadUserDevices();
+      await loadUserVehicles();
+      await loadItemsForSelectedVehicle();
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Sign up failed: ${e.toString()}');
+    }
   }
 
   Future<void> signIn(String email, String password) async {
-    // Check if user exists and password matches
-    final userMap = usersBox.get(email);
-    if (userMap != null && userMap['password'] == password) {
+    try {
+      // Sign in with Firebase Auth
+      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
       currentUserEmail = email;
-      currentUserName = userMap['name'];
-      deviceId = userMap['deviceId'];
+      currentUserName = userCredential.user?.displayName ?? email;
+      deviceId = null;
       isAuthenticated = true;
-      isFirstTimeSignUp = false; // Flag for returning users
+      isFirstTimeSignUp = false;
       
       // Load user-specific data from Hive
       await _loadUserData();
       await loadUserDevices();
       await loadUserVehicles();
-      // Load maintenance items for selected vehicle (if any)
       await loadItemsForSelectedVehicle();
       notifyListeners();
-    } else {
-      // Invalid credentials
-      throw Exception('Invalid email or password');
+    } catch (e) {
+      throw Exception('Sign in failed: ${e.toString()}');
     }
   }
 
   Future<void> signOut() async {
     // Save user data before signing out
     await _saveUserData();
+    
+    // Sign out from Firebase
+    await FirebaseAuth.instance.signOut();
 
     // Clear auth state and data
     currentUserEmail = null;

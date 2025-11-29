@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'models/maintenance_item.dart';
 import 'models/device.dart';
 import 'models/vehicle.dart';
@@ -12,6 +14,12 @@ import 'screens/sign_in.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   await Hive.initFlutter();
 
   Hive.registerAdapter(MaintenanceItemAdapter());
