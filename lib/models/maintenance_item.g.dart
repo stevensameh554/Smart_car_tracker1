@@ -22,13 +22,14 @@ class MaintenanceItemAdapter extends TypeAdapter<MaintenanceItem> {
       intervalDays: fields[3] as int,
       lastServiceMileage: fields[4] as int,
       lastServiceDateMs: fields[5] as int,
+      vehicleId: fields[6] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, MaintenanceItem obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -41,5 +42,10 @@ class MaintenanceItemAdapter extends TypeAdapter<MaintenanceItem> {
       ..write(obj.lastServiceMileage)
       ..writeByte(5)
       ..write(obj.lastServiceDateMs);
+    
+    // vehicleId
+    writer
+      ..writeByte(6)
+      ..write(obj.vehicleId);
   }
 }

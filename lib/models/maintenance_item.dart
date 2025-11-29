@@ -26,6 +26,10 @@ class MaintenanceItem extends HiveObject {
   /// last service date stored as milliseconds since epoch
   @HiveField(5)
   int lastServiceDateMs;
+  
+  /// Optional vehicle id this maintenance item belongs to
+  @HiveField(6)
+  String? vehicleId;
 
   MaintenanceItem({
     required this.id,
@@ -34,6 +38,7 @@ class MaintenanceItem extends HiveObject {
     required this.intervalDays,
     required this.lastServiceMileage,
     required this.lastServiceDateMs,
+    this.vehicleId,
   });
 
   DateTime get lastServiceDate =>

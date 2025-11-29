@@ -16,7 +16,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailCtl = TextEditingController();
   final _passwordCtl = TextEditingController();
   final _confirmPasswordCtl = TextEditingController();
-  final _deviceIdCtl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -27,7 +26,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _emailCtl.dispose();
     _passwordCtl.dispose();
     _confirmPasswordCtl.dispose();
-    _deviceIdCtl.dispose();
+    // device id removed from signup
     super.dispose();
   }
 
@@ -187,32 +186,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           : (v != _passwordCtl.text ? 'Passwords do not match' : null),
                     ),
                     SizedBox(height: 18),
-                    TextFormField(
-                      controller: _deviceIdCtl,
-                      style: TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Device ID',
-                        labelStyle: TextStyle(color: Colors.white70),
-                        hintText: 'Enter a unique device identifier',
-                        hintStyle: TextStyle(color: Colors.white30),
-                        filled: true,
-                        fillColor: Color(0xFF0D1821),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white24),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white24),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Color(0xFF0CBAB5)),
-                        ),
-                        prefixIcon: Icon(Icons.phone_android, color: Colors.white54),
-                      ),
-                      validator: (v) => (v == null || v.isEmpty) ? 'Enter a device ID' : null,
-                    ),
                     SizedBox(height: 30),
                     SizedBox(
                       width: double.infinity,
@@ -229,7 +202,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               _nameCtl.text.trim(),
                               _emailCtl.text.trim(),
                               _passwordCtl.text,
-                              _deviceIdCtl.text.trim(),
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Account created! Please sign in.')),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/maintenance_provider.dart';
 import 'sign_up.dart';
 import 'home_shell.dart';
+import 'devices.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -138,9 +139,13 @@ class _SignInScreenState extends State<SignInScreen> {
                               );
                               // Explicitly navigate into the app (replace sign-in route)
                               await Future.delayed(Duration(milliseconds: 200));
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(builder: (_) => const HomeShell()),
-                              );
+                              
+                              // First-time users go to Devices to add a device
+                              final route = prov.isFirstTimeSignUp
+                                  ? MaterialPageRoute(builder: (_) => const DevicesScreen())
+                                  : MaterialPageRoute(builder: (_) => const HomeShell());
+                              
+                              Navigator.of(context).pushReplacement(route);
                             } catch (e) {
                               // Show error if sign in failed
                               ScaffoldMessenger.of(context).showSnackBar(

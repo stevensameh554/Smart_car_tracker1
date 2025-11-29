@@ -17,6 +17,17 @@ class MaintenanceScreen extends StatelessWidget {
       length: 2,
       child: Column(
         children: [
+          // Show currently selected vehicle above tabs
+          if (prov.getSelectedVehicle() != null)
+            Container(
+              width: double.infinity,
+              color: Color(0xFF07121A),
+              padding: EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              child: Text(
+                'Vehicle: ${prov.getSelectedVehicle()!.name} • ${prov.getSelectedVehicle()!.carModel}',
+                style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
           Container(
             color: Color(0xFF07121A),
             child: TabBar(
@@ -103,13 +114,20 @@ class MaintenanceScreen extends StatelessWidget {
                     SizedBox(height: 8),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF0CBAB5),
+                        backgroundColor: (prov.selectedDeviceId == null || prov.selectedVehicleId == null)
+                            ? Colors.grey
+                            : Color(0xFF0CBAB5),
                         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddMaintenanceScreen()));
-                      },
+                      onPressed: (prov.selectedDeviceId == null || prov.selectedVehicleId == null)
+                          ? () {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text('Please add a device and a vehicle before adding maintenance items.')));
+                            }
+                          : () {
+                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddMaintenanceScreen()));
+                            },
                       icon: Icon(Icons.add),
                       label: Text('Add Item', style: TextStyle(color: Colors.black)),
                     ),

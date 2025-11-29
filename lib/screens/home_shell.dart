@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dashboard.dart';
 import 'trips.dart';
 import 'maintenance.dart';
-import 'vehicles.dart';
+import 'devices.dart';
 
 class HomeShell extends StatefulWidget {
   final int initialIndex;
@@ -18,7 +18,7 @@ class _HomeShellState extends State<HomeShell> {
     const DashboardScreen(),
     const TripsScreen(),
     const MaintenanceScreen(),
-    const VehiclesScreen(),
+    const DevicesScreen(),
   ];
 
   @override
@@ -38,7 +38,7 @@ class _HomeShellState extends State<HomeShell> {
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.alt_route), label: 'Trips'),
           BottomNavigationBarItem(icon: Icon(Icons.build), label: 'Maintenance'),
-          BottomNavigationBarItem(icon: Icon(Icons.directions_car_filled), label: 'Vehicles'),
+          BottomNavigationBarItem(icon: Icon(Icons.directions_car), label: 'Devices'),
         ],
       ),
     );

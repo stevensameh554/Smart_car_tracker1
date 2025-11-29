@@ -3,17 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'models/maintenance_item.dart';
+import 'models/device.dart';
+import 'models/vehicle.dart';
 import 'providers/maintenance_provider.dart';
 import 'screens/home_shell.dart';
 import 'screens/sign_in.dart';
-// The generated adapter is included via the `part` directive in the model file.
-// Do not import `maintenance_item.g.dart` directly.
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
   Hive.registerAdapter(MaintenanceItemAdapter());
+  Hive.registerAdapter(DeviceAdapter());
+  Hive.registerAdapter(VehicleAdapter());
   await Hive.openBox<MaintenanceItem>(MaintenanceProvider.boxName);
 
   await Hive.openBox<Map>(MaintenanceProvider.usersBoxName);
@@ -54,4 +57,4 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// `HomeShell` is defined in `lib/screens/home_shell.dart` to avoid circular imports
+

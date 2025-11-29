@@ -104,19 +104,30 @@ class _AddMaintenanceScreenState extends State<AddMaintenanceScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0CBAB5)),
               onPressed: () async {
+                if (prov.selectedDeviceId == null || prov.selectedVehicleId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('You must add a device and a vehicle before adding maintenance items.'),
+                  ));
+                  return;
+                }
+
                 if (_formKey.currentState?.validate() ?? false) {
                   final name = _nameCtl.text.trim();
                   final km = int.parse(_kmCtl.text.trim());
                   final days = int.parse(_daysCtl.text.trim());
                   final lastMileage = _lastServiceMileage == 0 ? prov.currentMileage : _lastServiceMileage;
-                  await prov.addItem(
-                    name: name,
-                    intervalKm: km,
-                    intervalDays: days,
-                    lastServiceMileage: lastMileage,
-                    lastServiceDate: _lastServiceDate,
-                  );
-                  Navigator.of(context).pop();
+                  try {
+                    await prov.addItem(
+                      name: name,
+                      intervalKm: km,
+                      intervalDays: days,
+                      lastServiceMileage: lastMileage,
+                      lastServiceDate: _lastServiceDate,
+                    );
+                    Navigator.of(context).pop();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                  }
                 }
               },
               child: Padding(

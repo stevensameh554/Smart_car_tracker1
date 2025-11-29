@@ -88,6 +88,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text("Dashboard", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               if (prov.currentUserName != null)
                 Text("${prov.currentUserName}", style: TextStyle(color: Colors.white70, fontSize: 12)),
+              // Show selected vehicle if available
+              if (prov.getSelectedVehicle() != null) ...[
+                SizedBox(height: 2),
+                Text(
+                  '${prov.getSelectedVehicle()!.name} • ${prov.getSelectedVehicle()!.carModel}',
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ],
             ],
           ),
           actions: [
@@ -142,7 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           SizedBox(height: 12),
                           Text("Current Mileage", style: TextStyle(color: Colors.white70, fontSize: 13)),
                           SizedBox(height: 8),
-                          Text("${prov.currentMileage} mi", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                          Text("${prov.currentMileage} km", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -163,7 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text("Total Distance", style: TextStyle(color: Colors.white70, fontSize: 13)),
                           SizedBox(height: 8),
                           // Period selector for distance display
-                          Row(
+                              Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text("${prov.distanceForPeriod(_selectedPeriod)} km", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../models/maintenance_item.dart';
+import '../models/device.dart';
+import '../models/vehicle.dart';
 
 class MaintenanceProvider with ChangeNotifier {
   static const String boxName = 'maintenance_items';
   static const String usersBoxName = 'registered_users';
+  static const String devicesBoxNamePrefix = 'user_devices';
+  static const String vehiclesBoxNamePrefix = 'user_vehicles';
   
   int currentMileage = 0;
   int todayDistance = 0;
@@ -17,7 +21,12 @@ class MaintenanceProvider with ChangeNotifier {
   String? currentUserEmail;
   String? currentUserName;
   String? deviceId;
+  bool isFirstTimeSignUp = false;
 
+  List<Device> devices = [];
+  String? selectedDeviceId;
+  List<Vehicle> vehicles = [];
+  String? selectedVehicleId;
   List<MaintenanceItem> items = [];
   late Box<MaintenanceItem> box;
   late Box<Map> usersBox; // Store registered users with their credentials
@@ -65,6 +74,12 @@ class MaintenanceProvider with ChangeNotifier {
     todayDistance += km;
     // Persist mileage for current user
     await _saveUserData();
+    // Also persist selected vehicle mileage so vehicles list stays in sync
+    // If vehicle selected, also add distance to vehicle's todayDistance before saving
+    if (selectedVehicleId != null) {
+      // _saveSelectedVehicleMileage will persist provider.todayDistance into the vehicle
+      await _saveSelectedVehicleMileage();
+    }
     notifyListeners();
   }
 
@@ -90,6 +105,10 @@ class MaintenanceProvider with ChangeNotifier {
     required int lastServiceMileage,
     required DateTime lastServiceDate,
   }) async {
+    // Require a device and a vehicle to be selected before adding an item
+    if (selectedDeviceId == null || selectedVehicleId == null) {
+      throw Exception('Please add a device and a vehicle before adding maintenance items.');
+    }
     final item = MaintenanceItem(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
@@ -97,11 +116,14 @@ class MaintenanceProvider with ChangeNotifier {
       intervalDays: intervalDays,
       lastServiceMileage: lastServiceMileage,
       lastServiceDateMs: lastServiceDate.millisecondsSinceEpoch,
+      vehicleId: selectedVehicleId,
     );
     
     // Save to user-specific box if authenticated
     if (currentUserEmail != null) {
-      final userBoxName = 'user_${currentUserEmail}_items';
+      final userBoxName = selectedVehicleId != null
+          ? 'user_${currentUserEmail}_vehicle_${selectedVehicleId}_items'
+          : 'user_${currentUserEmail}_items';
       try {
         final userBox = await Hive.openBox<MaintenanceItem>(userBoxName);
         await userBox.put(item.id, item);
@@ -118,7 +140,9 @@ class MaintenanceProvider with ChangeNotifier {
   Future<void> removeItem(String id) async {
     // Remove from user-specific box if authenticated
     if (currentUserEmail != null) {
-      final userBoxName = 'user_${currentUserEmail}_items';
+      final userBoxName = selectedVehicleId != null
+          ? 'user_${currentUserEmail}_vehicle_${selectedVehicleId}_items'
+          : 'user_${currentUserEmail}_items';
       try {
         final userBox = await Hive.openBox<MaintenanceItem>(userBoxName);
         await userBox.delete(id);
@@ -140,7 +164,9 @@ class MaintenanceProvider with ChangeNotifier {
       
       // Update in user-specific box if authenticated
       if (currentUserEmail != null) {
-        final userBoxName = 'user_${currentUserEmail}_items';
+        final userBoxName = selectedVehicleId != null
+            ? 'user_${currentUserEmail}_vehicle_${selectedVehicleId}_items'
+            : 'user_${currentUserEmail}_items';
         try {
           final userBox = await Hive.openBox<MaintenanceItem>(userBoxName);
           await userBox.put(id, items[itemIndex]);
@@ -179,23 +205,27 @@ class MaintenanceProvider with ChangeNotifier {
   // (already defined above)
 
   // AUTHENTICATION METHODS
-  Future<void> signUp(String name, String email, String password, String deviceId) async {
-    // Store user credentials in registered users box
+  Future<void> signUp(String name, String email, String password) async {
+    // Store user credentials in registered users box (no device attached at signup)
     usersBox.put(email, {
       'name': name,
       'email': email,
       'password': password,
-      'deviceId': deviceId,
     });
-    
+
     // Automatically sign in after signing up
     currentUserName = name;
     currentUserEmail = email;
-    this.deviceId = deviceId;
+    this.deviceId = null;
     isAuthenticated = true;
+    isFirstTimeSignUp = true; // Flag for first-time signup
     
     // Load user-specific data (should be empty for new user)
     await _loadUserData();
+    await loadUserDevices();
+    await loadUserVehicles();
+    // Load maintenance items for selected vehicle (if any)
+    await loadItemsForSelectedVehicle();
     notifyListeners();
   }
 
@@ -207,9 +237,14 @@ class MaintenanceProvider with ChangeNotifier {
       currentUserName = userMap['name'];
       deviceId = userMap['deviceId'];
       isAuthenticated = true;
+      isFirstTimeSignUp = false; // Flag for returning users
       
       // Load user-specific data from Hive
       await _loadUserData();
+      await loadUserDevices();
+      await loadUserVehicles();
+      // Load maintenance items for selected vehicle (if any)
+      await loadItemsForSelectedVehicle();
       notifyListeners();
     } else {
       // Invalid credentials
@@ -226,7 +261,12 @@ class MaintenanceProvider with ChangeNotifier {
     currentUserName = null;
     deviceId = null;
     isAuthenticated = false;
+    isFirstTimeSignUp = false;
     items = [];
+    devices = [];
+    vehicles = [];
+    selectedDeviceId = null;
+    selectedVehicleId = null;
     currentMileage = 0;
     todayDistance = 0;
     yesterdayDistance = 0;
@@ -237,7 +277,7 @@ class MaintenanceProvider with ChangeNotifier {
   // Load user-specific data from storage
   Future<void> _loadUserData() async {
     if (currentUserEmail != null) {
-      // Create user-specific box name
+      // Load fallback user items (if any)
       final userBoxName = 'user_${currentUserEmail}_items';
       try {
         final userBox = await Hive.openBox<MaintenanceItem>(userBoxName);
@@ -274,10 +314,13 @@ class MaintenanceProvider with ChangeNotifier {
   // Save user-specific data to storage
   Future<void> _saveUserData() async {
     if (currentUserEmail != null) {
-      // Save maintenance items to user-specific box
-      final userBoxName = 'user_${currentUserEmail}_items';
+      // Save maintenance items to vehicle-specific box if a vehicle is selected,
+      // otherwise use the fallback user items box.
+      final boxName = selectedVehicleId != null
+          ? 'user_${currentUserEmail}_vehicle_${selectedVehicleId}_items'
+          : 'user_${currentUserEmail}_items';
       try {
-        final userBox = await Hive.openBox<MaintenanceItem>(userBoxName);
+        final userBox = await Hive.openBox<MaintenanceItem>(boxName);
         await userBox.clear();
         for (var item in items) {
           await userBox.put(item.id, item);
@@ -299,6 +342,406 @@ class MaintenanceProvider with ChangeNotifier {
       } catch (e) {
         print('Error saving user mileage: $e');
       }
+    }
+  }
+
+  // DEVICE MANAGEMENT METHODS
+  Future<void> addDevice(String id, String name) async {
+    final device = Device(
+      id: id,
+      name: name,
+      carModel: '',
+      currentMileage: 0,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    // Save to user-specific devices box
+    if (currentUserEmail != null) {
+      final devicesBoxName = '${devicesBoxNamePrefix}_${currentUserEmail}';
+      try {
+        final devicesBox = await Hive.openBox<Device>(devicesBoxName);
+        await devicesBox.put(device.id, device);
+      } catch (e) {
+        print('Error saving device: $e');
+      }
+    }
+
+    devices.add(device);
+    if (devices.length == 1) {
+      selectedDeviceId = device.id; // Auto-select first device
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadUserDevices() async {
+    if (currentUserEmail != null) {
+      final devicesBoxName = '${devicesBoxNamePrefix}_${currentUserEmail}';
+      try {
+        final devicesBox = await Hive.openBox<Device>(devicesBoxName);
+        devices = devicesBox.values.toList();
+        if (devices.isNotEmpty && selectedDeviceId == null) {
+          selectedDeviceId = devices.first.id;
+        }
+      } catch (e) {
+        print('Error loading devices: $e');
+        devices = [];
+      }
+    }
+    notifyListeners();
+  }
+
+  // Update device
+  Future<void> updateDevice(String deviceId, {String? name, String? carModel, int? newMileage}) async {
+    if (currentUserEmail == null) return;
+    try {
+      final devicesBoxName = '${devicesBoxNamePrefix}_${currentUserEmail}';
+      final devicesBox = await Hive.openBox<Device>(devicesBoxName);
+      final idx = devices.indexWhere((d) => d.id == deviceId);
+      if (idx != -1) {
+        final existing = devices[idx];
+        final updated = Device(
+          id: existing.id,
+          name: name ?? existing.name,
+          carModel: carModel ?? existing.carModel,
+          currentMileage: newMileage ?? existing.currentMileage,
+          createdAtMs: existing.createdAtMs,
+        );
+        await devicesBox.put(updated.id, updated);
+        devices[idx] = updated;
+        // If it's the selected device and no vehicle selected, keep state
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error updating device: $e');
+    }
+  }
+
+  // Remove device and associated vehicles/items
+  Future<void> removeDevice(String deviceId) async {
+    if (currentUserEmail == null) return;
+    try {
+      // Remove device from box
+      final devicesBoxName = '${devicesBoxNamePrefix}_${currentUserEmail}';
+      final devicesBox = await Hive.openBox<Device>(devicesBoxName);
+      await devicesBox.delete(deviceId);
+
+      // Remove associated vehicles and their items
+      final toRemove = vehicles.where((v) => v.deviceId == deviceId).toList();
+      for (var v in toRemove) {
+        await removeVehicle(v.id);
+      }
+
+      // Remove from in-memory list
+      devices.removeWhere((d) => d.id == deviceId);
+
+      // Update selected device if needed
+      if (selectedDeviceId == deviceId) {
+        selectedDeviceId = devices.isNotEmpty ? devices.first.id : null;
+        // pick a vehicle for the new device
+        if (selectedDeviceId != null) {
+          final vehiclesForDevice = vehicles.where((v) => v.deviceId == selectedDeviceId).toList();
+          selectedVehicleId = vehiclesForDevice.isNotEmpty ? vehiclesForDevice.first.id : null;
+        } else {
+          selectedVehicleId = null;
+        }
+        await loadItemsForSelectedVehicle();
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error removing device: $e');
+    }
+  }
+
+  Future<void> selectDevice(String deviceId) async {
+    // Save items for current vehicle before changing device
+    await _saveItemsForCurrentVehicle();
+    selectedDeviceId = deviceId;
+    notifyListeners();
+  }
+
+  Device? getSelectedDevice() {
+    if (selectedDeviceId == null) return null;
+    try {
+      return devices.firstWhere((d) => d.id == selectedDeviceId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // VEHICLE MANAGEMENT METHODS
+  Future<void> addVehicle(String deviceId, String name, String carModel, int initialMileage) async {
+    final vehicle = Vehicle(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      deviceId: deviceId,
+      name: name,
+      carModel: carModel,
+      currentMileage: initialMileage,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    // Save to user-specific vehicles box
+    if (currentUserEmail != null) {
+      final vehiclesBoxName = '${vehiclesBoxNamePrefix}_${currentUserEmail}';
+      try {
+        final vehiclesBox = await Hive.openBox<Vehicle>(vehiclesBoxName);
+        await vehiclesBox.put(vehicle.id, vehicle);
+      } catch (e) {
+        print('Error saving vehicle: $e');
+      }
+    }
+
+    // Add to in-memory list
+    vehicles.add(vehicle);
+
+    // Always select the newly added vehicle and update current mileage
+    selectedVehicleId = vehicle.id;
+    currentMileage = vehicle.currentMileage;
+
+    // Persist any existing items to the vehicle box and load items for this vehicle
+    await loadItemsForSelectedVehicle();
+
+    notifyListeners();
+  }
+
+  Future<void> loadUserVehicles() async {
+    if (currentUserEmail != null) {
+      final vehiclesBoxName = '${vehiclesBoxNamePrefix}_${currentUserEmail}';
+      try {
+        final vehiclesBox = await Hive.openBox<Vehicle>(vehiclesBoxName);
+        vehicles = vehiclesBox.values.toList();
+        // Auto-select first vehicle for selected device
+        final vehiclesForDevice = vehicles.where((v) => v.deviceId == selectedDeviceId).toList();
+        if (vehiclesForDevice.isNotEmpty && selectedVehicleId == null) {
+          selectedVehicleId = vehiclesForDevice.first.id;
+        } else if (selectedVehicleId != null && !vehicles.any((v) => v.id == selectedVehicleId)) {
+          // If selected vehicle doesn't belong to selected device, pick first of device
+          final newVehicles = vehicles.where((v) => v.deviceId == selectedDeviceId).toList();
+          selectedVehicleId = newVehicles.isNotEmpty ? newVehicles.first.id : null;
+        }
+        // If we have a selected vehicle, pick up its per-vehicle distances
+        if (selectedVehicleId != null) {
+          try {
+            final v = vehicles.firstWhere((vv) => vv.id == selectedVehicleId);
+            currentMileage = v.currentMileage;
+            todayDistance = v.todayDistance;
+            yesterdayDistance = v.yesterdayDistance;
+            lastWeekDistance = v.lastWeekDistance;
+          } catch (_) {}
+        }
+      } catch (e) {
+        print('Error loading vehicles: $e');
+        vehicles = [];
+      }
+    }
+    notifyListeners();
+  }
+
+  List<Vehicle> getVehiclesForDevice(String deviceId) {
+    return vehicles.where((v) => v.deviceId == deviceId).toList();
+  }
+
+  // Update vehicle
+  Future<void> updateVehicle(String vehicleId, {String? name, String? carModel, int? newMileage}) async {
+    if (currentUserEmail == null) return;
+    try {
+      final vehiclesBoxName = '${vehiclesBoxNamePrefix}_${currentUserEmail}';
+      final vehiclesBox = await Hive.openBox<Vehicle>(vehiclesBoxName);
+      final idx = vehicles.indexWhere((v) => v.id == vehicleId);
+      if (idx != -1) {
+        final existing = vehicles[idx];
+        final updated = Vehicle(
+          id: existing.id,
+          deviceId: existing.deviceId,
+          name: name ?? existing.name,
+          carModel: carModel ?? existing.carModel,
+          currentMileage: newMileage ?? existing.currentMileage,
+          createdAtMs: existing.createdAtMs,
+        );
+        await vehiclesBox.put(updated.id, updated);
+        vehicles[idx] = updated;
+        // If this was the selected vehicle, update provider currentMileage and per-vehicle distances and persist
+        if (selectedVehicleId == updated.id) {
+          this.currentMileage = updated.currentMileage;
+          // keep provider distance totals in sync if any changes (they may remain unchanged)
+          todayDistance = updated.todayDistance;
+          yesterdayDistance = updated.yesterdayDistance;
+          lastWeekDistance = updated.lastWeekDistance;
+          await _saveUserData();
+          await _saveSelectedVehicleMileage();
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error updating vehicle: $e');
+    }
+  }
+
+  // Remove vehicle and its items
+  Future<void> removeVehicle(String vehicleId) async {
+    if (currentUserEmail == null) return;
+    try {
+      final vehiclesBoxName = '${vehiclesBoxNamePrefix}_${currentUserEmail}';
+      final vehiclesBox = await Hive.openBox<Vehicle>(vehiclesBoxName);
+      await vehiclesBox.delete(vehicleId);
+
+      // delete vehicle-specific items box
+      final itemsBoxName = 'user_${currentUserEmail}_vehicle_${vehicleId}_items';
+      try {
+        final itemsBox = await Hive.openBox<MaintenanceItem>(itemsBoxName);
+        await itemsBox.clear();
+        await itemsBox.deleteFromDisk();
+      } catch (_) {}
+
+      vehicles.removeWhere((v) => v.id == vehicleId);
+
+      // Update selection if needed
+      if (selectedVehicleId == vehicleId) {
+        selectedVehicleId = null;
+        // try pick another vehicle from same device
+        if (selectedDeviceId != null) {
+          try {
+            final other = vehicles.firstWhere((v) => v.deviceId == selectedDeviceId);
+            selectedVehicleId = other.id;
+          } catch (_) {
+            selectedVehicleId = null;
+          }
+        }
+        await loadItemsForSelectedVehicle();
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error removing vehicle: $e');
+    }
+  }
+
+  Future<void> selectVehicle(String vehicleId) async {
+    // Save current in-memory items to the box for the currently selected vehicle
+    await _saveItemsForCurrentVehicle();
+
+    selectedVehicleId = vehicleId;
+
+    // Update current mileage to the vehicle's mileage
+    Vehicle? v;
+    try {
+      v = vehicles.firstWhere((vv) => vv.id == vehicleId);
+    } catch (_) {
+      v = null;
+    }
+    if (v != null) {
+      currentMileage = v.currentMileage;
+      todayDistance = v.todayDistance;
+      yesterdayDistance = v.yesterdayDistance;
+      lastWeekDistance = v.lastWeekDistance;
+    } else {
+      currentMileage = 0;
+      todayDistance = 0;
+      yesterdayDistance = 0;
+      lastWeekDistance = 0;
+    }
+
+    // Load maintenance items for this vehicle
+    await loadItemsForSelectedVehicle();
+
+    notifyListeners();
+  }
+
+  // Load maintenance items for the currently selected vehicle (or fallback user items)
+  Future<void> loadItemsForSelectedVehicle() async {
+    if (currentUserEmail == null) {
+      items = [];
+      notifyListeners();
+      return;
+    }
+
+    final boxName = selectedVehicleId != null
+        ? 'user_${currentUserEmail}_vehicle_${selectedVehicleId}_items'
+        : 'user_${currentUserEmail}_items';
+
+    try {
+      final userBox = await Hive.openBox<MaintenanceItem>(boxName);
+      items = userBox.values.toList();
+    } catch (e) {
+      items = [];
+    }
+    notifyListeners();
+  }
+
+  Vehicle? getSelectedVehicle() {
+    if (selectedVehicleId == null) return null;
+    try {
+      return vehicles.firstWhere((v) => v.id == selectedVehicleId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> changeDevice(String newDeviceId) async {
+    // Save current items before switching device
+    await _saveItemsForCurrentVehicle();
+
+    selectedDeviceId = newDeviceId;
+    // Auto-select first vehicle for this device
+    final vehiclesForDevice = vehicles.where((v) => v.deviceId == newDeviceId).toList();
+    selectedVehicleId = vehiclesForDevice.isNotEmpty ? vehiclesForDevice.first.id : null;
+    // If we have a selected vehicle, update current mileage to it
+    if (selectedVehicleId != null) {
+      try {
+        final v = vehicles.firstWhere((vv) => vv.id == selectedVehicleId);
+        currentMileage = v.currentMileage;
+      } catch (_) {
+        currentMileage = 0;
+      }
+    } else {
+      currentMileage = 0;
+    }
+
+    // Load maintenance items for the selected vehicle (or fallback)
+    await loadItemsForSelectedVehicle();
+    notifyListeners();
+  }
+
+  // Persist current in-memory items to the box for the currently selected vehicle (or fallback)
+  Future<void> _saveItemsForCurrentVehicle() async {
+    if (currentUserEmail == null) return;
+    final boxName = selectedVehicleId != null
+        ? 'user_${currentUserEmail}_vehicle_${selectedVehicleId}_items'
+        : 'user_${currentUserEmail}_items';
+    try {
+      final userBox = await Hive.openBox<MaintenanceItem>(boxName);
+      await userBox.clear();
+      for (var item in items) {
+        await userBox.put(item.id, item);
+      }
+    } catch (e) {
+      print('Error saving items for current vehicle: $e');
+    }
+  }
+
+  // Persist the selected vehicle's mileage to the vehicles box and in-memory list
+  Future<void> _saveSelectedVehicleMileage() async {
+    if (currentUserEmail == null || selectedVehicleId == null) return;
+    try {
+      final vehiclesBoxName = '${vehiclesBoxNamePrefix}_${currentUserEmail}';
+      final vehiclesBox = await Hive.openBox<Vehicle>(vehiclesBoxName);
+
+      final idx = vehicles.indexWhere((v) => v.id == selectedVehicleId);
+      if (idx != -1) {
+        final existing = vehicles[idx];
+        final updated = Vehicle(
+          id: existing.id,
+          deviceId: existing.deviceId,
+          name: existing.name,
+          carModel: existing.carModel,
+          currentMileage: currentMileage,
+          createdAtMs: existing.createdAtMs,
+        );
+        await vehiclesBox.put(updated.id, updated);
+        vehicles[idx] = updated;
+      }
+    } catch (e) {
+      print('Error saving selected vehicle mileage: $e');
     }
   }
 }
